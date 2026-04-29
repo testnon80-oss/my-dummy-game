@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>Dummy Pro Online</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0e331a; color: white; margin: 0; text-align: center; }
+        .card { display: inline-block; width: 55px; height: 80px; background: white; color: black; border-radius: 6px; margin: 4px; line-height: 80px; font-weight: bold; cursor: pointer; border: 2px solid #555; position: relative; font-size: 18px; }
+        .card.selected { border: 3px solid #f1c40f; transform: translateY(-15px); box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        .red { color: #e74c3c; }
+        .black { color: #2c3e50; }
+        .board { display: none; padding: 20px; }
+        .pile-zone { background: rgba(255,255,255,0.1); padding: 20px; border-radius: 15px; margin-bottom: 20px; border: 2px dashed #27ae60; }
+        .hand-zone { position: fixed; bottom: 0; left: 0; width: 100%; background: #161b22; padding: 20px 0; border-top: 3px solid #27ae60; }
+        button { padding: 10px 20px; margin: 5px; font-size: 16px; border-radius: 5px; border: none; cursor: pointer; transition: 0.3s; }
+        .btn-draw { background: #3498db; color: white; }
+        .btn-discard { background: #e67e22; color: white; }
+        .btn-start { background: #2ecc71; color: white; padding: 15px 30px; font-size: 20px; }
+        .status-bar { font-size: 18px; margin-bottom: 15px; padding: 10px; background: #000; }
+    </style>
+</head>
+<body>
+
+    <div id="lobby">
+        <h1 style="margin-top: 100px;">🎴 DUMMY ONLINE</h1>
+        <input type="text" id="user" placeholder="ชื่อของคุณ" style="padding: 10px;">
+        <input type="text" id="room" placeholder="ชื่อห้อง" style="padding: 10px;">
+        <br><br>
+        <button onclick="join()" class="btn-start">สร้าง/เข้าห้อง</button>
+    </div>
+
+    <div id="game" class="board">
+        <div class="status-bar">
+            ห้อง: <span id="rName"></span> | 
+            <b>ตาของ: <span id="currentTurn" style="color: #f1c40f;"></span></b>
+        </div>
+
+        <div class="pile-zone">
+            <h3>กองกลาง</h3>
+            <div id="pileDisplay"></div>
+            <button onclick="drawCard()" class="btn-draw" id="drawBtn">จั่วไพ่จากกอง</button>
+            <button onclick="startGame()" class="btn-start" id="startBtn">เริ่มเกม</button>
+        </div>
+
+        <div class="hand-zone">
+            <h3>ไพ่ในมือของคุณ</h3>
+            <div id="handDisplay"></div>
+            <div style="margin-top: 15px;">
+                <button onclick="discardCard()" class="btn-discard">ทิ้งไพ่ที่เลือก</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let myName, myRoom, selectedData = null;
+
+        function join() {
+            myName = document.getElementById('user').value;
+            myRoom = document.getElementById('room').value;
+            if(!myName || !myRoom) return alert("กรอกข้อมูลให้ครบ!");
+            socket.emit('joinRoom', { roomName: myRoom, userName: myName });
+            document.getElementById('lobby').style.display = 'none';
+            document.getElementById('game').style.display = 'block';
+            document.getElementById('rName').innerText = myRoom;
+        }
+
+        function startGame() { socket.emit('startGame', myRoom); }
+        function drawCard() { socket.emit('drawCard', myRoom); }
+
+        socket.on('updateRoom', (room) => {
+            const player = room.players.find(p => p.name === myName);
+            const activePlayer = room.players[room.turn];
+            
+            document.getElementById('currentTurn').innerText = activePlayer ? activePlayer.name : "รอผู้เล่น...";
+            
+            // วาดไพ่ในมือ
+            const handDiv = document.getElementById('handDisplay');
+            handDiv.innerHTML = "";
+            if(player) {
+                player.hand.forEach(card => {
+                    const div = document.createElement('div');
+                    div.className = `card ${['♥','♦'].includes(card.suit) ? 'red' : 'black'}`;
+                    div.innerHTML = `${card.value}<br>${card.suit}`;
+                    div.onclick = () => {
+                        selectedData = card;
+                        document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
+                        div.classList.add('selected');
+                    };
+                    handDiv.appendChild(div);
+                });
+            }
+
+            // วาดกองกลาง
+            const pileDiv = document.getElementById('pileDisplay');
+            const lastCard = room.pile[room.pile.length - 1];
+            pileDiv.innerHTML = lastCard ? `<div class="card ${['♥','♦'].includes(lastCard.suit) ? 'red' : 'black'}">${lastCard.value}<br>${lastCard.suit}</div>` : "ไม่มีไพ่";
+
+            if(room.started) document.getElementById('startBtn').style.display = 'none';
+        });
+
+        function discardCard() {
+            if(!selectedData) return alert("เลือกไพ่ก่อนทิ้ง!");
+            socket.emit('discard', { roomName: myRoom, card: selectedData });
+            selectedData = null;
+        }
+    </script>
+</body>
+</html>
